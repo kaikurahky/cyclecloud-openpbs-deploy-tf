@@ -1,0 +1,15 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+*.tfvars
+*.tfvars.json
+.terraform.tfstate.lock.info
+crash.log
+config/*.env
+work/
+logs/
+*.pem
+*.key
+__pycache__/

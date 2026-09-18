@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#PBS -N mpi-openpbs
+#PBS -q workq
+#PBS -l select=2:ncpus=2:mpiprocs=2:mem=2gb
+#PBS -l place=scatter:group=group_id
+#PBS -l walltime=00:10:00
+#PBS -j oe
+set -euo pipefail
+source /etc/profile.d/modules.sh
+module load "${MPI_MODULE:?Submit with qsub -v MPI_MODULE=your-openmpi-module}"
+cd "${PBS_O_WORKDIR:?}"
+processes=$(wc -l < "$PBS_NODEFILE")
+[[ "$processes" -eq 4 ]] || { printf 'Expected four MPI slots\n' >&2; exit 1; }
+[[ $(sort -u "$PBS_NODEFILE" | wc -l) -eq 2 ]] || { printf 'Expected two hosts\n' >&2; exit 1; }
+mpirun -np "$processes" --hostfile "$PBS_NODEFILE" --map-by slot \
+  --mca pml ob1 --mca btl self,tcp ./mpi_hello
