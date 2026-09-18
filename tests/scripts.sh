@@ -4,6 +4,34 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
+# shellcheck disable=SC2317
+(
+  az() {
+    case "$1 $2" in
+      'account show') printf 'test account\r\n' ;;
+      'provider show') printf '%s\r\n' "${TEST_PROVIDER_STATE:-Registered}" ;;
+      'vm image')
+        if [[ "$3" == terms ]]; then
+          printf '%s\r\n' "${TEST_TERMS_ACCEPTED:-true}"
+        else
+          printf '{"dataDiskImages":[{"lun":0}]}\r\n'
+        fi
+        ;;
+      *) return 1 ;;
+    esac
+  }
+  terraform() { return 0; }
+  export -f az terraform
+  sed -e 's/00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111/' \
+    -e 's/replacewithuniquename/pbsteststorage/' \
+    "$root/config/cyclecloud.env.example" > "$temporary/infra.env"
+  printf 'ssh-rsa test-only-not-a-real-key\n' > "$temporary/test.pub"
+  printf '\nSSH_PUBLIC_KEY_FILE="%s"\n' "$temporary/test.pub" >> "$temporary/infra.env"
+  bash "$root/scripts/preflight.sh" "$temporary/infra.env"
+  if TEST_PROVIDER_STATE=Registering bash "$root/scripts/preflight.sh" "$temporary/infra.env"; then exit 1; fi
+  if TEST_TERMS_ACCEPTED=false bash "$root/scripts/preflight.sh" "$temporary/infra.env"; then exit 1; fi
+)
+
 printf '%s\n' \
   '[[[cluster-init cyclecloud/pbspro:default]]]' \
   '[[[cluster-init cyclecloud/pbspro:server]]]' \
@@ -36,4 +64,4 @@ if [[ -f "$root/work/cyclecloud-pbspro/templates/openpbs.txt" ]]; then
   done < <(jq -r 'keys[]' "$temporary/parameters.json")
   bash "$root/scripts/render-template.sh" "$root/work/cyclecloud-pbspro/templates/openpbs.txt" 2.0.26 > "$temporary/upstream.txt"
 fi
-printf 'PASS: template pinning, parameter rendering, invalid inputs and upstream parameter names\n'
+printf 'PASS: CRLF preflight, template pinning, parameter rendering, invalid inputs and upstream parameter names\n'

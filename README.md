@@ -21,16 +21,43 @@ VM に Public IP は付けません。Bastion、VPN、ExpressRoute、踏み台�
 
 ## クイックスタート
 
-Linux/WSL、Bash、Azure CLI、Terraform 1.14 以上、Git、curl、jq、SSH が必要です。Private リポジトリはアクセス権のある GitHub アカウントで取得してください。
+Windows 10/11 の **コマンドプロンプト + Git for Windows の Bash** で進められる構成です。WSL は不要です。Azure CLI に加え、Terraform 1.14 以上、jq、GitHub CLI をインストールします。Git for Windows には Bash、Git、curl、SSH が含まれます。
+
+まず **コマンドプロンプト（cmd.exe）** で実行します。winget と、必要に応じてインストーラーの管理者承認が必要です。
+
+```bat
+winget install --exact --id Git.Git --source winget
+winget install --exact --id Microsoft.AzureCLI --source winget
+winget install --exact --id Hashicorp.Terraform --source winget
+winget install --exact --id jqlang.jq --source winget
+winget install --exact --id GitHub.cli --source winget
+```
+
+インストール後は PATH を更新するため **コマンドプロンプトを開き直し**、作業フォルダーを用意して Bash を起動します。
+
+```bat
+if not exist C:\work mkdir C:\work
+cd /d C:\work
+"C:\Program Files\Git\bin\bash.exe" --login -i
+```
+
+Git のインストール先を変更した場合はパスを合わせてください。単に `bash` と入力すると、WSL 側の Bash が起動する場合があるため、上記のフルパスを使います。
+
+ここからは **同じウィンドウ内の Bash** で実行します。`source`、`cp`、`$変数`、複数行の `\` は cmd.exe の構文ではありません。Bash を終了するには `exit` を使います。
 
 ```bash
+cd /c/work
+az version
+terraform version
+jq --version
+gh auth login --hostname github.com --git-protocol https --web
 gh repo clone kaikurahky/cyclecloud-openpbs-deploy-tf
 cd cyclecloud-openpbs-deploy-tf
 cp config/cyclecloud.env.example config/cyclecloud.env
 cp config/openpbs.env.example config/openpbs.env
 ```
 
-2 つの設定ファイルを編集し、[事前準備](docs/deployment-guide.md#2-事前準備)を完了させてから実行します。
+Private リポジトリへのアクセス権が必要です。2 つの設定ファイルは VS Code などで **UTF-8（BOM なし）・LF 改行**で編集し、[事前準備](docs/deployment-guide.md#2-事前準備)を完了させてから実行します。Windows のパス表記、SSH 鍵、Bastion の注意点も同ガイドに記載しています。
 
 ```bash
 az login
@@ -75,7 +102,7 @@ bash tests/scripts.sh
 
 `validate.sh` は ShellCheck、Bash 構文検査、パラメータ回帰テスト、Terraform validate、mock Provider の plan テストを実行します。Azure 認証や有料リソースの作成は不要です。Terraform Provider と上流プロジェクトの取得にはインターネット接続が必要です。
 
-2026-09-18 時点でローカル検証および公式リリース 13 ファイルのダウンロード・ハッシュ照合を実施しました。**Azure 実環境への apply、CycleCloud への登録、PBS/MPI 実行は未検証**です。実環境での受入基準は [構築ガイド](docs/deployment-guide.md#10-受入確認チェックリスト) に記載しています。
+2026-09-18 時点で Linux 上のローカル検証および公式リリース 13 ファイルのダウンロード・ハッシュ照合を実施しました。Windows 版 Git Bash 5.3 ではシェル構文検査、公式テンプレートの変換、Azure CLI 2.77 の起動を確認済みです。Windows CLI の CRLF 出力は疑似応答による回帰テストで確認しています。**Windows 版 Terraform・jq を含む一連の実行、Azure 実環境への apply、CycleCloud への登録、PBS/MPI 実行は未検証**です。実環境での受入基準は [構築ガイド](docs/deployment-guide.md#10-受入確認チェックリスト) に記載しています。
 
 ## 注意事項
 

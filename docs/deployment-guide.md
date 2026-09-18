@@ -33,15 +33,51 @@ Terraform が管理するのは Azure 基盤と CycleCloud VM です。PBS serve
 
 ### 2.1 必要な権限とツール
 
-**作業端末:** Linux または WSL2、Bash 4 以上、Git、curl、jq、OpenSSH、Azure CLI、Terraform 1.14 以上。ローカル検証には ShellCheck も必要です。Private リポジトリの clone には GitHub のアクセス権と認証が必要です。GitHub CLI は clone の補助で、展開自体には不要です。
+**作業端末:** Windows 10/11 のコマンドプロンプトから Git for Windows の Bash を起動する構成です。WSL は不要です。Bash 4 以上、Git、curl、OpenSSH、jq、Azure CLI、Terraform 1.14 以上・2.0 未満を使用します。Private リポジトリの clone には GitHub のアクセス権と認証が必要です。GitHub CLI は clone の補助で、展開自体には不要です。
+
+#### Windows へのインストール（コマンドプロンプト）
+
+次のコマンドは **cmd.exe** で実行します。winget が必要です。利用できない場合は [App Installer / winget](https://learn.microsoft.com/windows/package-manager/winget/) を導入するか、組織の管理者に各ツールの導入を依頼してください。インストーラーから管理者承認を求められた場合は組織の方針に従います。
+
+```bat
+winget install --exact --id Git.Git --source winget
+winget install --exact --id Microsoft.AzureCLI --source winget
+winget install --exact --id Hashicorp.Terraform --source winget
+winget install --exact --id jqlang.jq --source winget
+winget install --exact --id GitHub.cli --source winget
+```
+
+Git for Windows に Bash、Git、curl、SSH が含まれます。Azure CLI の導入方法は [Microsoft 公式手順](https://learn.microsoft.com/cli/azure/install-azure-cli-windows)も参照してください。
+
+インストール後は PATH を反映するため、**コマンドプロンプトを閉じて開き直し**、次を実行します。
+
+```bat
+if not exist C:\work mkdir C:\work
+cd /d C:\work
+"C:\Program Files\Git\bin\bash.exe" --login -i
+```
+
+Git の導入先が異なる場合はパスを変更します。単に `bash` と入力すると WSL 側が選ばれる場合があるため、実行ファイルをフルパスで指定します。`C:\work` に書き込めない場合は、自分が書き込めるフォルダーを使ってください。
+
+#### 以降は Bash で実行
+
+同じウィンドウ内で Bash が起動したら、以下を実行します。本記事の `bash` コードブロックは **cmd.exe / PowerShell へ直接貼り付けません**。`source`、`cp`、`$変数`、複数行の `\` は Bash の構文です。
 
 ```bash
+cd /c/work
+bash --version
 az version
 terraform version
 git --version
+curl --version
+ssh -V
 jq --version
-shellcheck --version
+gh --version
 ```
+
+`C:\work` は Git Bash では `/c/work` です。`command not found` ならインストールの完了、PATH、ターミナルの開き直しを確認します。Linux / WSL2 でも、同じ必要ツールを用意すれば以降の Bash 手順を使用できます。その場合は `/c/work` を自分の作業ディレクトリに読み替えます。
+
+`scripts/validate.sh` による開発用のローカル検証には別途 ShellCheck が必要です。通常の展開には不要です。Windows 版ツールを使う一連の展開は未検証です。サーバ側の手順は SSH 接続先の Linux 上で実行します。
 
 **Azure 権限:** 対象サブスクリプションで RG・リソースを作成できること。さらに RBAC のロール割り当て権限が必要です。例は Owner、または Contributor と Role Based Access Control Administrator の組み合わせです。組織側の条件付き RBAC、Azure Policy、Marketplace 制限が優先されます。
 
@@ -63,9 +99,10 @@ ANF は Flexible pool 1 TiB / 128 MiB/s、ボリューム 1024 GiB を作りま�
 
 ### 2.3 clone と設定
 
-**作業端末:**
+**作業端末の Bash:** Windows では 2.1 で起動した Bash を使います。
 
 ```bash
+gh auth login --hostname github.com --git-protocol https --web
 gh repo clone kaikurahky/cyclecloud-openpbs-deploy-tf
 cd cyclecloud-openpbs-deploy-tf
 cp config/cyclecloud.env.example config/cyclecloud.env
@@ -77,8 +114,11 @@ GitHub CLI がない場合は、アクセス権のある Git 認証を設定し�
 必要なら SSH 鍵を新規生成します。既存の鍵を上書きしないでください。
 
 ```bash
+mkdir -p ~/.ssh
 ssh-keygen -t rsa -b 3072 -f ~/.ssh/cyclecloud_openpbs
 ```
+
+Git Bash の `$HOME` は通常 Windows ユーザーのホームです。`printf '%s\n' "$HOME"` で確認できます。`SSH_PUBLIC_KEY_FILE="$HOME/.ssh/cyclecloud_openpbs.pub"` のように設定し、Windows の絶対パスを指定する場合も `/c/Users/名前/.ssh/cyclecloud_openpbs.pub` のように `/` を使います。秘密鍵のパスは指定しません。
 
 [config/cyclecloud.env.example](../config/cyclecloud.env.example) を参考に、実設定を編集します。
 
@@ -96,7 +136,9 @@ ssh-keygen -t rsa -b 3072 -f ~/.ssh/cyclecloud_openpbs
 
 `TF_VAR_management_source_cidrs` の例 `10.60.254.0/26` は Bastion 用の予約例で、Bastion を作成する指定ではありません。また NSG の既定 `AllowVNetInBound` は維持されます。VNet 内の通信も厳密に制限する場合は PBS、NFS、MPI、CycleCloud の通信設計と合わせて変更してください。
 
-設定は Bash として source されます。第三者から受け取った未確認の設定を実行しないでください。
+設定は Bash として source されます。第三者から受け取った未確認の設定を実行しないでください。VS Code などで **UTF-8（BOM なし）・LF 改行**として保存します。`.gitattributes` は配布するシェルスクリプト・設定例を LF に固定しますが、手動編集した実設定はエディターで確認してください。`$'\r': command not found` などが出る場合は CRLF 改行を疑います。
+
+Git Bash の自動パス変換を全体で無効化する `export MSYS_NO_PATHCONV=1` は設定しません。Terraform や jq に渡すローカルファイルパスの変換も止まるためです。Azure リソース ID を渡す Bastion コマンドに限り、後述のとおりコマンド単位で無効化します。
 
 ### 2.4 Azure ログインと Resource Provider 登録
 
@@ -181,7 +223,7 @@ terraform -chdir=infra output
 
 ARM 形式の `cluster_subnet_id` と CycleCloud 用の短い `cluster_subnet_cyclecloud` は別です。後者を OpenPBS テンプレートに渡してください。
 
-state とバックアップには環境情報が含まれます。リポジトリを消す前に安全な保管先を確保してください。チーム運用では別管理の Azure Storage backend 等を設計してください。同じ state に異なる環境の設定を交互に適用しないでください。
+state とバックアップには環境情報が含まれます。リポジトリを消す前に安全な保管先を確保してください。チーム運用では別管理の Azure Storage backend 等を設計してください。同じ state に異なる環境の設定を交互に適用しないでください。Windows では Bash の `umask` だけで NTFS のアクセス権を制限できるとは限りません。秘密鍵・state・実設定の保存先は Windows の ACL でも他ユーザーから保護してください。
 
 ## 4. CycleCloud サーバを初期設定する
 
@@ -193,16 +235,18 @@ state とバックアップには環境情報が含まれます。リポジト�
 
 ```bash
 CC_VM_ID=$(terraform -chdir=infra output -raw cyclecloud_vm_id)
-az network bastion tunnel --name YOUR_BASTION_NAME \
+MSYS_NO_PATHCONV=1 az network bastion tunnel --name YOUR_BASTION_NAME \
   --resource-group YOUR_BASTION_RESOURCE_GROUP \
   --target-resource-id "$CC_VM_ID" --resource-port 9443 --port 19443
 ```
 
-トンネルを起動したまま `https://localhost:19443` を開きます。SSH 用は別ターミナルで:
+`MSYS_NO_PATHCONV=1` は Git Bash が `/subscriptions/...` を Windows のローカルパスへ変換するのを防ぎます。この指定は当該コマンドにだけ適用され、Linux では不要ですが付いていても問題ありません。
+
+トンネルを起動したまま `https://localhost:19443` を開きます。SSH 用は別ターミナルで Bash を起動し、同じリポジトリへ移動して実行します。Windows の例では `cd /c/work/cyclecloud-openpbs-deploy-tf` です。
 
 ```bash
 CC_VM_ID=$(terraform -chdir=infra output -raw cyclecloud_vm_id)
-az network bastion tunnel --name YOUR_BASTION_NAME \
+MSYS_NO_PATHCONV=1 az network bastion tunnel --name YOUR_BASTION_NAME \
   --resource-group YOUR_BASTION_RESOURCE_GROUP \
   --target-resource-id "$CC_VM_ID" --resource-port 22 --port 10022
 ```
@@ -210,6 +254,8 @@ az network bastion tunnel --name YOUR_BASTION_NAME \
 ```bash
 ssh -i ~/.ssh/cyclecloud_openpbs -p 10022 azureuser@127.0.0.1
 ```
+
+SSH コマンドはさらに別の Bash で実行し、両方のトンネルを起動したままにします。以降の `scp` による転送時も SSH 用トンネルが必要です。
 
 ### 4.2 サービス・DNS 確認
 
